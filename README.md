@@ -36,6 +36,8 @@ Phones on cellular networks are often behind carrier-grade NAT. A device cannot 
 
 The GitHub Actions workflow builds a **debug APK** and uploads it as a workflow artifact when a build is successfully run. A successful compile only proves that the app compiles; it does not prove P2P networking, encryption, background delivery or carrier compatibility. Artifacts are temporary and are not a permanent release download.
 
+A push to `main` is configured to start the Android debug build automatically; `workflow_dispatch` is also enabled for manual runs.
+
 ## Security principles
 
 - Never store plaintext chat content in a discovery/signaling service.
