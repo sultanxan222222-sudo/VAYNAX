@@ -3,6 +3,8 @@ name: VAYNAX Android APK build
 on:
   push:
     branches: [ "main", "ui/chechen-theme" ]
+  pull_request:
+    branches: [ "main" ]
   workflow_dispatch:
 
 permissions:
