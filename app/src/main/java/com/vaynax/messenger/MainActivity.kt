@@ -326,21 +326,17 @@ private fun ChatHome(
                     }
                     OutlinedTextField(value = messageDraft, onValueChange = { messageDraft = it },
                         modifier = Modifier.fillMaxWidth(), label = { Text("Сообщение") })
-                    Button(enabled = !busy && messageDraft.isNotBlank(), onClick = {
-                        val target = selectedContact
-                        val draft = messageDraft
-                        if (target != null) runRequest {
-                            val encoded = "v1:" + android.util.Base64.encodeToString(draft.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
-                            VaynaxApi(baseUrl).sendMessage(token, target.id, encoded)
-                            chatMessages = (chatMessages + Pair("me", draft)).takeLast(200)
-                            messageDraft = ""
-                            "Сообщение отправлено в очередь. Получатель увидит его после загрузки сообщений."
-                        }
-                    }, modifier = Modifier.fillMaxWidth()) { Text("Отправить") }
+                    Button(enabled = false, onClick = {}, modifier = Modifier.fillMaxWidth()) {
+                        Text("Отправка временно отключена")
+                    }
+                    Text(
+                        "Безопасность: прежняя версия кодировала текст в Base64, но это не шифрование. Отправка отключена, чтобы не выдавать открытый текст за защищённую переписку.",
+                        color = Gold, fontSize = 12.sp
+                    )
                 }
             }
             Text(status, color = Gold, fontSize = 14.sp)
-            Text("Переписка, сквозное шифрование, QR-коды и звонки ещё не реализованы. Не используй тестовый сервер для личных данных.",
+            Text("Сквозное шифрование, безопасная доставка, QR-коды и звонки ещё не реализованы. Не отправляй личные данные через эту сборку.",
                 color = Snow, fontSize = 12.sp)
         }
     }
