@@ -26,7 +26,12 @@ jobs:
       # GitHub-hosted Android runners already include the SDK. Avoid setup-android
       # here: its current action attempts to install the removed legacy "tools" package.
       - name: Install Android platform and build tools
-        run: yes | sdkmanager --licenses >/dev/null; sdkmanager "platforms;android-36" "build-tools;36.0.0"
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
       - name: Build debug APK
