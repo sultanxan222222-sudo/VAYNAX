@@ -322,11 +322,14 @@ private fun VaynaxApp(
     var editing by remember { mutableStateOf(userId.isBlank()) }
     var status by remember { mutableStateOf("Создай аккаунт, затем найди устройство рядом.") }
     var peers by remember { mutableStateOf<List<WifiP2pDevice>>(emptyList()) }
-    var selectedPeer by remember { mutableStateOf<WifiP2pDevice?>(null) }
     var isConnected by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
     var lines by remember { mutableStateOf<List<ChatLine>>(emptyList()) }
+    var showGreeting by remember { mutableStateOf(true) }
+
     LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(1400)
+        showGreeting = false
         try {
             val arr = org.json.JSONArray(historyPrefs.getString("items", "[]"))
             lines = (0 until arr.length()).map { i ->
@@ -337,63 +340,172 @@ private fun VaynaxApp(
     }
 
     Surface(Modifier.fillMaxSize(), color = DeepEmerald) {
-        Column(Modifier.fillMaxSize().background(DeepEmerald).padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("VAYNAX", color = Gold, fontSize = 32.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp)
-            Text("Связь с близкими", color = Snow, fontSize = 14.sp)
-            Spacer(Modifier.height(18.dp))
-            if (editing) {
-                Text("Создать аккаунт", color = Snow, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+        if (showGreeting) {
+            Column(Modifier.fillMaxSize().background(DeepEmerald).padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Text("✦", color = Gold, fontSize = 34.sp)
+                Spacer(Modifier.height(14.dp))
+                Text("Ассаляму алейкум", color = Snow, fontSize = 28.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(value = nickname, onValueChange = { nickname = it.take(32) }, modifier = Modifier.fillMaxWidth(), label = { Text("Твой псевдоним") }, singleLine = true)
-                Spacer(Modifier.height(10.dp))
-                Button(onClick = {
-                    val name = nickname.trim()
-                    if (name.isNotEmpty()) {
-                        if (userId.isBlank()) userId = UUID.randomUUID().toString()
-                        savedNickname = name
-                        prefs.edit().putString("nickname", name).putString("user_id", userId).apply()
-                        editing = false
-                        status = "Аккаунт сохранён на этом телефоне."
-                    }
-                }, enabled = nickname.trim().isNotEmpty(), modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = DeepEmerald)) { Text("Сохранить аккаунт", fontWeight = FontWeight.Bold) }
-            } else {
-                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Emerald), shape = RoundedCornerShape(16.dp)) {
-                    Column(Modifier.padding(14.dp)) {
-                        Text("Твой аккаунт", color = Gold, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Text(savedNickname, color = Snow, fontSize = 21.sp, fontWeight = FontWeight.SemiBold)
-                        Text("ID: ${userId.take(8)}…", color = Snow, fontSize = 12.sp)
-                        OutlinedButton(onClick = { editing = true }, modifier = Modifier.fillMaxWidth()) { Text("Изменить псевдоним") }
-                    }
+                Text("VAYNAX", color = Gold, fontSize = 30.sp, fontWeight = FontWeight.Bold, letterSpacing = 5.sp)
+                Spacer(Modifier.height(18.dp))
+                Row(Modifier.fillMaxWidth(0.62f).height(5.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Box(Modifier.weight(1f).fillMaxHeight().background(Color(0xFF168653), RoundedCornerShape(3.dp)))
+                    Box(Modifier.weight(1f).fillMaxHeight().background(Snow, RoundedCornerShape(3.dp)))
+                    Box(Modifier.weight(1f).fillMaxHeight().background(Color(0xFFB62835), RoundedCornerShape(3.dp)))
                 }
-                Spacer(Modifier.height(12.dp))
-                Button(onClick = { onDiscover({ peers = it }, { status = it }, { isConnected = it }, { item -> lines = lines + item }) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = DeepEmerald)) { Text("Найти устройства рядом", fontWeight = FontWeight.Bold) }
-                LazyColumn(Modifier.weight(0.8f).fillMaxWidth()) {
-                    items(peers, key = { it.deviceAddress }) { peer ->
-                        TextButton(onClick = { selectedPeer = peer; onConnect(peer); status = "Подключаемся к ${peer.deviceName.ifBlank { "устройству" }}…" }, modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.fillMaxWidth()) {
-                                Text(peer.deviceName.ifBlank { "Устройство без имени" }, color = Gold)
-                                Text(if (peer.status == WifiP2pDevice.AVAILABLE) "Доступно — нажми для подключения" else "Статус: ${peer.status}", color = Snow, fontSize = 12.sp)
-                            }
+                Spacer(Modifier.height(18.dp))
+                Text("Связь с близкими", color = Gold, fontSize = 14.sp, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(28.dp))
+                Text("━━━━━━━━  ✧  ━━━━━━━━", color = Gold.copy(alpha = 0.7f), fontSize = 12.sp)
+            }
+        } else {
+            Column(Modifier.fillMaxSize().background(DeepEmerald).padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("VAYNAX", color = Gold, fontSize = 28.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
+                        Text("Связь с близкими", color = Snow.copy(alpha = 0.82f), fontSize = 13.sp)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("ЧЕЧЕНСКИЙ СТИЛЬ", color = Gold, fontSize = 9.sp, letterSpacing = 1.sp)
+                        Row(Modifier.width(72.dp).height(4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Box(Modifier.weight(1f).fillMaxHeight().background(Color(0xFF168653)))
+                            Box(Modifier.weight(1f).fillMaxHeight().background(Snow))
+                            Box(Modifier.weight(1f).fillMaxHeight().background(Color(0xFFB62835)))
                         }
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (isConnected) "Соединение установлено" else "Нет соединения", color = if (isConnected) Gold else Snow, fontSize = 12.sp)
-                }
-                Text("Сообщения (локальная история)", color = Gold, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
-                LazyColumn(Modifier.weight(1f).fillMaxWidth().background(Emerald, RoundedCornerShape(10.dp)).padding(8.dp)) {
-                    items(lines, key = { it.id }) { line ->
-                        Text("${if (line.mine) "Я" else line.sender}: ${line.text}", color = if (line.mine) Gold else Snow, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp))
+                Spacer(Modifier.height(12.dp))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Gold.copy(alpha = 0.55f)))
+                Spacer(Modifier.height(12.dp))
+
+                if (editing) {
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Emerald),
+                        shape = RoundedCornerShape(18.dp)) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text("ТВОЙ ПРОФИЛЬ", color = Gold, fontSize = 12.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(8.dp))
+                            Text("Создать аккаунт", color = Snow, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(6.dp))
+                            Text("Имя будет храниться на этом телефоне.", color = Snow.copy(alpha = 0.75f), fontSize = 13.sp)
+                            Spacer(Modifier.height(12.dp))
+                            OutlinedTextField(value = nickname, onValueChange = { nickname = it.take(32) },
+                                modifier = Modifier.fillMaxWidth(), label = { Text("Твой псевдоним") }, singleLine = true,
+                                shape = RoundedCornerShape(12.dp))
+                            Spacer(Modifier.height(12.dp))
+                            Button(onClick = {
+                                val name = nickname.trim()
+                                if (name.isNotEmpty()) {
+                                    if (userId.isBlank()) userId = UUID.randomUUID().toString()
+                                    savedNickname = name
+                                    prefs.edit().putString("nickname", name).putString("user_id", userId).apply()
+                                    editing = false
+                                    status = "Аккаунт сохранён на этом телефоне."
+                                }
+                            }, enabled = nickname.trim().isNotEmpty(), modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = DeepEmerald),
+                                shape = RoundedCornerShape(12.dp)) { Text("Сохранить аккаунт", fontWeight = FontWeight.Bold) }
+                        }
+                    }
+                } else {
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Emerald),
+                        shape = RoundedCornerShape(16.dp)) {
+                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(46.dp).background(DeepEmerald, RoundedCornerShape(23.dp)), contentAlignment = Alignment.Center) {
+                                Text(savedNickname.trim().take(1).uppercase().ifBlank { "V" }, color = Gold, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(savedNickname, color = Snow, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                                Text("ID: " + userId.take(8) + "…", color = Snow.copy(alpha = 0.68f), fontSize = 11.sp)
+                            }
+                            TextButton(onClick = { editing = true }) { Text("Изменить", color = Gold, fontSize = 12.sp) }
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Button(onClick = {
+                        onDiscover({ peers = it }, { status = it }, { isConnected = it },
+                            { item -> if (lines.none { existing -> existing.id == item.id }) lines = lines + item })
+                    }, modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = DeepEmerald),
+                        shape = RoundedCornerShape(12.dp)) {
+                        Text("⌕   Найти устройства рядом", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    }
+                    if (peers.isNotEmpty()) {
+                        Text("УСТРОЙСТВА РЯДОМ", color = Gold, fontSize = 11.sp, letterSpacing = 1.5.sp,
+                            modifier = Modifier.align(Alignment.Start).padding(top = 10.dp, bottom = 4.dp))
+                        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 112.dp)
+                            .background(Emerald, RoundedCornerShape(12.dp)).padding(horizontal = 8.dp)) {
+                            items(peers, key = { it.deviceAddress }) { peer ->
+                                TextButton(onClick = {
+                                    onConnect(peer)
+                                    status = "Подключаемся к " + peer.deviceName.ifBlank { "устройству" } + "…"
+                                }, modifier = Modifier.fillMaxWidth()) {
+                                    Column(Modifier.fillMaxWidth()) {
+                                        Text(peer.deviceName.ifBlank { "Устройство без имени" }, color = Gold, fontWeight = FontWeight.SemiBold)
+                                        Text(if (peer.status == WifiP2pDevice.AVAILABLE) "Доступно · нажми для подключения" else "Статус: " + peer.status,
+                                            color = Snow.copy(alpha = 0.78f), fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth().background(if (isConnected) Color(0xFF124A37) else Color(0xFF263B35),
+                        RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(8.dp).background(if (isConnected) Color(0xFF70D99A) else Gold.copy(alpha = 0.7f), RoundedCornerShape(4.dp)))
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (isConnected) "Защищённое соединение установлено" else "Ожидание Wi-Fi Direct", color = Snow, fontSize = 12.sp)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Сообщения", color = Gold, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.width(8.dp))
+                        Text("· локальная история", color = Snow.copy(alpha = 0.62f), fontSize = 11.sp)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    LazyColumn(Modifier.weight(1f).fillMaxWidth().background(Color(0xFF052F28), RoundedCornerShape(14.dp)).padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        if (lines.isEmpty()) item {
+                            Column(Modifier.fillMaxWidth().padding(vertical = 22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("✧", color = Gold, fontSize = 28.sp)
+                                Spacer(Modifier.height(6.dp))
+                                Text("Здесь начнётся ваш разговор", color = Snow, fontSize = 14.sp, textAlign = TextAlign.Center)
+                                Spacer(Modifier.height(4.dp))
+                                Text("Найди устройство рядом и подключись.", color = Snow.copy(alpha = 0.62f), fontSize = 12.sp, textAlign = TextAlign.Center)
+                            }
+                        }
+                        items(lines, key = { it.id }) { line ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = if (line.mine) Arrangement.End else Arrangement.Start) {
+                                Column(Modifier.widthIn(max = 280.dp)
+                                    .background(if (line.mine) Color(0xFF165541) else Emerald, RoundedCornerShape(14.dp))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                    Text(if (line.mine) "Ты" else line.sender, color = Gold, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(line.text, color = Snow, fontSize = 14.sp)
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(value = draft, onValueChange = { draft = it.take(2000) }, modifier = Modifier.weight(1f),
+                            label = { Text("Написать сообщение") }, maxLines = 3, shape = RoundedCornerShape(14.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Button(onClick = {
+                            val msg = draft.trim()
+                            if (msg.isNotEmpty()) { onSend(msg); draft = "" }
+                        }, enabled = draft.trim().isNotEmpty(),
+                            colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = DeepEmerald),
+                            shape = RoundedCornerShape(14.dp), modifier = Modifier.height(54.dp)) { Text("➤", fontSize = 20.sp) }
                     }
                 }
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(value = draft, onValueChange = { draft = it.take(2000) }, modifier = Modifier.weight(1f), label = { Text("Сообщение") }, maxLines = 3)
-                    Spacer(Modifier.width(8.dp))
-                    Button(onClick = { val msg = draft.trim(); if (msg.isNotEmpty()) { onSend(msg); draft = "" } }, enabled = draft.trim().isNotEmpty(), colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = DeepEmerald)) { Text("➤") }
-                }
+                Spacer(Modifier.height(8.dp))
+                Text(status, color = Gold.copy(alpha = 0.88f), fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(4.dp))
+                Text("━━━━━━━━  ✧  ━━━━━━━━", color = Gold.copy(alpha = 0.5f), fontSize = 10.sp)
             }
-            Spacer(Modifier.height(8.dp))
-            Text(status, color = Gold, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
     }
 }
