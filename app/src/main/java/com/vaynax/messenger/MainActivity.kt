@@ -1,6 +1,9 @@
 package com.vaynax.messenger
 
 import android.os.Bundle
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
@@ -16,6 +19,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
+import kotlin.math.PI
+import kotlin.math.exp
+import kotlin.math.sin
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +40,40 @@ private val DeepEmerald = Color(0xFF032B24)
 private val Gold = Color(0xFFE6C477)
 private val Snow = Color(0xFFF5F7F8)
 private val ChechenRed = Color(0xFFC7353D)
+
+/** Synthesized resonant glass-clink notification; no external audio file required. */
+private fun playMessageClink() {
+    Thread {
+        try {
+            val rate = 44100
+            val count = (rate * 0.62).toInt()
+            val samples = ShortArray(count)
+            val frequencies = doubleArrayOf(1760.0, 2315.0, 2960.0, 3540.0, 4210.0)
+            for (i in 0 until count) {
+                val t = i.toDouble() / rate
+                var value = 0.0
+                for ((index, frequency) in frequencies.withIndex()) {
+                    val delay = if (index % 2 == 0) 0.0 else 0.016
+                    if (t >= delay) {
+                        val local = t - delay
+                        value += sin(2.0 * PI * frequency * local) * exp(-local * (7.0 + index)) / (index + 1.0)
+                    }
+                }
+                samples[i] = (value * exp(-t * 3.0) * 9000.0).toInt().coerceIn(-32768, 32767).toShort()
+            }
+            val minimum = AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
+            if (minimum <= 0) return@Thread
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+                .setAudioFormat(AudioFormat.Builder().setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
+                .setBufferSizeInBytes(maxOf(minimum, samples.size * 2)).setTransferMode(AudioTrack.MODE_STATIC).build()
+            track.write(samples, 0, samples.size)
+            track.play()
+            Thread.sleep(720)
+            track.release()
+        } catch (_: Exception) { }
+    }.start()
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -234,6 +274,7 @@ private fun ChatHome(
                             } catch (_: Exception) { null }
                         }
                         chatMessages = (chatMessages + decoded).takeLast(200)
+                        if (decoded.any { it.first != "me" }) playMessageClink()
                         api.acknowledge(token, pending.map { it.id })
                         "Загружено сообщений: ${decoded.size}. Важно: содержимое пока не защищено сквозным шифрованием."
                     } }, modifier = Modifier.fillMaxWidth()) { Text("Загрузить сообщения") }
