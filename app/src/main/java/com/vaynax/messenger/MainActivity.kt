@@ -17,6 +17,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -326,6 +327,7 @@ private fun VaynaxApp(
     var draft by remember { mutableStateOf("") }
     var lines by remember { mutableStateOf<List<ChatLine>>(emptyList()) }
     var showGreeting by remember { mutableStateOf(true) }
+    var showEmojiPicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(1400)
@@ -465,7 +467,15 @@ private fun VaynaxApp(
                         Text("· локальная история", color = Snow.copy(alpha = 0.62f), fontSize = 11.sp)
                     }
                     Spacer(Modifier.height(6.dp))
-                    LazyColumn(Modifier.weight(1f).fillMaxWidth().background(Color(0xFF052F28), RoundedCornerShape(14.dp)).padding(10.dp),
+                    Box(Modifier.weight(1f).fillMaxWidth().background(Color(0xFF031F1B), RoundedCornerShape(16.dp))
+                        .border(1.dp, Gold.copy(alpha = 0.25f), RoundedCornerShape(16.dp))) {
+                        Column(Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(top = 14.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🇨🇮", color = Gold.copy(alpha = 0.75f), fontSize = 18.sp)
+                            Text("⛰   🏰   ⛰", color = Gold.copy(alpha = 0.48f), fontSize = 22.sp)
+                            Text("VAYNAX · СВЯЗЬ С БЛИЗКИМИ", color = Gold.copy(alpha = 0.6f), fontSize = 9.sp, letterSpacing = 1.2.sp)
+                        }
+                        LazyColumn(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 76.dp),
                         verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         if (lines.isEmpty()) item {
                             Column(Modifier.fillMaxWidth().padding(vertical = 22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -487,9 +497,24 @@ private fun VaynaxApp(
                                 }
                             }
                         }
+                        }
+                    }
+                    if (showEmojiPicker) {
+                        val emojis = listOf("😀","😁","😂","🤣","😊","😍","🥰","😘","😎","🤝","🙏","💚","❤️","🔥","👍","💪","🦅","🏔️","🇨🇮","✨")
+                        Column(Modifier.fillMaxWidth().background(Emerald, RoundedCornerShape(14.dp)).padding(8.dp)) {
+                            Text("Смайлики", color = Gold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            emojis.chunked(5).forEach { rowEmojis ->
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                                    rowEmojis.forEach { emoji ->
+                                        TextButton(onClick = { draft += emoji }) { Text(emoji, fontSize = 22.sp) }
+                                    }
+                                }
+                            }
+                        }
                     }
                     Spacer(Modifier.height(8.dp))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { showEmojiPicker = !showEmojiPicker }) { Text("☺", color = Gold, fontSize = 25.sp) }
                         OutlinedTextField(value = draft, onValueChange = { draft = it.take(2000) }, modifier = Modifier.weight(1f),
                             label = { Text("Написать сообщение") }, maxLines = 3, shape = RoundedCornerShape(14.dp))
                         Spacer(Modifier.width(8.dp))
