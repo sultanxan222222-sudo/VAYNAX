@@ -12,7 +12,18 @@ data class VaynaxMessage(val id: String, val senderId: String, val ciphertext: S
 data class VaynaxVoiceNote(val id: String, val senderId: String, val contentType: String, val createdAt: Long, val sizeBytes: Long)
 
 class VaynaxApi(baseUrl: String) {
-    private val base = baseUrl.trim().trimEnd('/')
+    private val base = baseUrl.trim().trimEnd('/').also { value ->
+        val parsed = runCatching { URL(value) }.getOrNull()
+        val https = parsed?.protocol.equals("https", ignoreCase = true)
+        val localHttp = parsed?.protocol.equals("http", ignoreCase = true) &&
+            (parsed?.host.equals("localhost", ignoreCase = true) ||
+             parsed?.host == "127.0.0.1" || parsed?.host == "::1")
+        require(parsed != null && (https || localHttp) &&
+            parsed.userInfo == null && parsed.query == null && parsed.ref == null &&
+            parsed.path.orEmpty().trimEnd('/').isEmpty()) {
+            "Укажи только HTTPS-адрес API без логина, пароля, пути, параметров или фрагмента. HTTP разрешён только для localhost."
+        }
+    }
 
     private suspend fun request(
         method: String,
