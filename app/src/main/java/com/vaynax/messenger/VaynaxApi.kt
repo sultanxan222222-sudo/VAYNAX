@@ -44,11 +44,31 @@ class VaynaxApi(baseUrl: String) {
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-            val result = if (text.isBlank()) JSONObject() else JSONObject(text)
-            if (status !in 200..299) throw IllegalStateException(result.optString("error", "Ошибка сервера ($status)"))
+            val result = parseJsonObject(text, status, path)
+            if (status !in 200..299) {
+                val serverError = result.optString("error").ifBlank {
+                    result.optString("message").ifBlank { "Сервер вернул HTTP $status" }
+                }
+                throw IllegalStateException(serverError)
+            }
+            if (text.isNotBlank() && !text.trimStart().startsWith("{")) {
+                throw IllegalStateException("Сервер вернул не JSON для $path (HTTP $status). Проверь адрес сервера и его развёртывание.")
+            }
             result
         } finally {
             connection.disconnect()
+        }
+    }
+
+    private fun parseJsonObject(text: String, status: Int, path: String): JSONObject {
+        if (text.isBlank()) return JSONObject()
+        return try {
+            JSONObject(text)
+        } catch (_: org.json.JSONException) {
+            val preview = text.trim().replace(Regex("\\s+"), " ").take(180)
+            JSONObject()
+                .put("error", "Ответ сервера не является JSON (HTTP $status, $path). " +
+                    "Возможно, адрес ведёт на страницу ошибки/прокси, а не на API. Ответ: $preview")
         }
     }
 
