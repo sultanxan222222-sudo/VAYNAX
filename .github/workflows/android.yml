@@ -23,10 +23,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Install required Android platform
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      # GitHub-hosted Android runners already include the SDK. Avoid setup-android
+      # here: its current action attempts to install the removed legacy "tools" package.
+      - name: Install Android platform and build tools
+        run: yes | sdkmanager --licenses >/dev/null; sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
       - name: Build debug APK
