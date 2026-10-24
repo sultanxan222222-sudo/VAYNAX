@@ -167,6 +167,33 @@ wss.on("connection", ws => {
       ws.send(JSON.stringify({ type: "error", error: "Invalid JSON packet" }));
       return;
     }
+    // Authenticated WebRTC signaling relay; audio/video media itself stays on WebRTC.
+    if (packet?.type === "call_signal") {
+      const recipientId = typeof packet.recipientId === "string" ? packet.recipientId : "";
+      const callId = typeof packet.callId === "string" ? packet.callId : "";
+      const signal = packet.signal;
+      const allowedKinds = new Set(["offer", "answer", "ice", "hangup", "reject", "busy"]);
+      if (!/^[0-9a-f-]{36}$/i.test(recipientId) ||
+          !/^[0-9a-f-]{36}$/i.test(callId) ||
+          !signal || typeof signal !== "object" || Array.isArray(signal) ||
+          !allowedKinds.has(signal.kind) ||
+          JSON.stringify(signal).length > 16_000) {
+        ws.send(JSON.stringify({ type: "error", error: "Invalid call signaling packet" }));
+        return;
+      }
+      if (!db.prepare("SELECT 1 FROM contacts WHERE user_id=? AND contact_id=?").get(id, recipientId)) {
+        ws.send(JSON.stringify({ type: "error", error: "Recipient is not an approved contact" }));
+        return;
+      }
+      const delivered = deliver(recipientId, {
+        type: "call_signal",
+        callId,
+        senderId: id,
+        signal
+      });
+      ws.send(JSON.stringify({ type: "call_signal_status", callId, delivered }));
+      return;
+    }
     if (packet?.type !== "message") return;
     const recipientId = typeof packet.recipientId === "string" ? packet.recipientId : "";
     const ciphertext = typeof packet.ciphertext === "string" ? packet.ciphertext : "";
