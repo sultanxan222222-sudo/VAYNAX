@@ -1,0 +1,45 @@
+name: VAYNAX backend validation
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "server/**"
+      - ".github/workflows/backend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: server/package.json
+      - name: Install dependencies
+        run: npm install
+      - name: Check server syntax
+        run: node --check src/server.js
+      - name: Start server and verify health endpoint
+        shell: bash
+        run: |
+          PORT=8088 DB_PATH=/tmp/vaynax-ci.sqlite npm start > /tmp/vaynax-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8088/health; then
+              echo
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/vaynax-server.log
+          exit 1
