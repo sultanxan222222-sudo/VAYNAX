@@ -88,7 +88,7 @@ private fun VaynaxApp() {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("vaynax_private", android.content.Context.MODE_PRIVATE) }
     var showChats by remember { mutableStateOf(false) }
-    var baseUrl by remember { mutableStateOf(prefs.getString("server_url", "https://vaynax-server.onrender.com") ?: "https://vaynax-server.onrender.com") }
+    var baseUrl by remember { mutableStateOf(prefs.getString("server_url", "") ?: "") }
     var token by remember { mutableStateOf(prefs.getString("account_token", "") ?: "") }
     var accountName by remember { mutableStateOf(prefs.getString("account_name", "") ?: "") }
     Surface(Modifier.fillMaxSize(), color = DeepEmerald) {
@@ -197,7 +197,7 @@ private fun ChatHome(
     var selectedContact by remember { mutableStateOf<VaynaxContact?>(null) }
     var messageDraft by remember { mutableStateOf("") }
     var chatMessages by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
-    var status by remember { mutableStateOf("Укажи адрес работающего сервера, чтобы подключить аккаунт.") }
+    var status by remember { mutableStateOf("Сервер не настроен. VAYNAX пока не имеет встроенного P2P-обнаружения устройств; без доступного узла регистрация и доставка сообщений не заработают.") }
     var busy by remember { mutableStateOf(false) }
 
     // Keep the open chat fresh while the app is in the foreground.
