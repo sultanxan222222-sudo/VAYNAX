@@ -12,6 +12,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,13 +43,18 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun VaynaxApp() {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("vaynax_private", android.content.Context.MODE_PRIVATE) }
     var showChats by remember { mutableStateOf(false) }
+    var baseUrl by remember { mutableStateOf(prefs.getString("server_url", "") ?: "") }
+    var token by remember { mutableStateOf(prefs.getString("account_token", "") ?: "") }
+    var accountName by remember { mutableStateOf(prefs.getString("account_name", "") ?: "") }
     Surface(Modifier.fillMaxSize(), color = DeepEmerald) {
-        if (!showChats) {
-            WelcomeScreen(onContinue = { showChats = true })
-        } else {
-            ChatHome(onBack = { showChats = false })
-        }
+        if (!showChats) WelcomeScreen(onContinue = { showChats = true })
+        else ChatHome(baseUrl, { baseUrl = it; prefs.edit().putString("server_url", it).apply() },
+            token, { token = it; prefs.edit().putString("account_token", it).apply() },
+            accountName, { accountName = it; prefs.edit().putString("account_name", it).apply() },
+            onBack = { showChats = false })
     }
 }
 
@@ -130,22 +138,84 @@ private fun MountainTowerArt(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ChatHome(onBack: () -> Unit) {
-    Column(
-        Modifier.fillMaxSize().background(DeepEmerald).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text("VAYNAX", color = Gold, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-        Text("Чаты", color = Snow, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
-        Text(
-            "Основа интерфейса готова. Личные и групповые сообщения, приглашения по QR-коду, защищённая синхронизация и интернет-звонки будут подключаться следующими этапами.",
-            color = Snow, fontSize = 16.sp
-        )
-        FeatureRow("Сообщения", "Будет подключено")
-        FeatureRow("Аудиозвонки через интернет", "Запланировано")
-        FeatureRow("Видеозвонки через интернет", "Запланировано")
-        Spacer(Modifier.weight(1f))
-        Button(onClick = onBack) { Text("Назад к приветствию") }
+private fun ChatHome(
+    baseUrl: String,
+    onBaseUrlChange: (String) -> Unit,
+    token: String,
+    onTokenChange: (String) -> Unit,
+    accountName: String,
+    onAccountNameChange: (String) -> Unit,
+    onBack: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var nameInput by remember { mutableStateOf(accountName) }
+    var inviteCode by remember { mutableStateOf("") }
+    var createdInvite by remember { mutableStateOf("") }
+    var contacts by remember { mutableStateOf<List<VaynaxContact>>(emptyList()) }
+    var status by remember { mutableStateOf("Укажи адрес работающего сервера, чтобы подключить аккаунт.") }
+    var busy by remember { mutableStateOf(false) }
+
+    fun runRequest(action: suspend () -> String) {
+        if (busy) return
+        busy = true
+        scope.launch {
+            try { status = action() }
+            catch (e: Exception) { status = e.message ?: "Не удалось выполнить запрос" }
+            finally { busy = false }
+        }
+    }
+
+    Column(Modifier.fillMaxSize().background(DeepEmerald).padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("VAYNAX", color = Gold, fontSize = 27.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Button(onClick = onBack) { Text("Назад") }
+        }
+        Text("Подключение и контакты", color = Snow, fontSize = 21.sp, fontWeight = FontWeight.SemiBold)
+        Column(Modifier.fillMaxWidth().weight(1f).padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(value = baseUrl, onValueChange = onBaseUrlChange, modifier = Modifier.fillMaxWidth(),
+                label = { Text("Адрес сервера HTTPS") }, singleLine = true, placeholder = { Text("https://твой-сервер.example") })
+            if (token.isBlank()) {
+                OutlinedTextField(value = nameInput, onValueChange = { nameInput = it }, modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Твой псевдоним") }, singleLine = true)
+                Button(enabled = !busy && nameInput.trim().isNotEmpty() && (baseUrl.startsWith("https://") || baseUrl.startsWith("http://")),
+                    onClick = { runRequest {
+                        val result = VaynaxApi(baseUrl).register(nameInput)
+                        val newToken = result.getString("token")
+                        val newName = result.optString("name", nameInput.trim())
+                        onTokenChange(newToken); onAccountNameChange(newName)
+                        "Аккаунт создан: $newName"
+                    } }, modifier = Modifier.fillMaxWidth()) { Text(if (busy) "Подключение…" else "Создать аккаунт") }
+            } else {
+                Text("Аккаунт: $accountName", color = Gold, fontSize = 16.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(enabled = !busy, onClick = { runRequest {
+                        val me = VaynaxApi(baseUrl).me(token); "Подключено как ${me.optString("name", accountName)}"
+                    } }, modifier = Modifier.weight(1f)) { Text("Проверить") }
+                    Button(enabled = !busy, onClick = { runRequest {
+                        val result = VaynaxApi(baseUrl).createInvite(token)
+                        createdInvite = result.getString("code"); "Приглашение создано. Действует 7 дней."
+                    } }, modifier = Modifier.weight(1f)) { Text("Создать код") }
+                }
+                if (createdInvite.isNotBlank()) Text("Код приглашения: $createdInvite", color = Gold, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                OutlinedTextField(value = inviteCode, onValueChange = { inviteCode = it.uppercase() },
+                    modifier = Modifier.fillMaxWidth(), label = { Text("Код друга") }, singleLine = true)
+                Button(enabled = !busy && inviteCode.trim().isNotEmpty(), onClick = { runRequest {
+                    val peer = VaynaxApi(baseUrl).redeemInvite(token, inviteCode)
+                    inviteCode = ""
+                    contacts = VaynaxApi(baseUrl).contacts(token)
+                    "Добавлен контакт: ${peer.optString("name")}"
+                } }, modifier = Modifier.fillMaxWidth()) { Text("Добавить по коду") }
+                Button(enabled = !busy, onClick = { runRequest {
+                    contacts = VaynaxApi(baseUrl).contacts(token); "Контактов: ${contacts.size}"
+                } }, modifier = Modifier.fillMaxWidth()) { Text("Обновить контакты") }
+                Text("Контакты", color = Snow, fontWeight = FontWeight.SemiBold)
+                if (contacts.isEmpty()) Text("Пока нет загруженных контактов.", color = Snow, fontSize = 13.sp)
+                contacts.forEach { Text("• ${it.name}", color = Snow, fontSize = 15.sp) }
+            }
+            Text(status, color = Gold, fontSize = 14.sp)
+            Text("Переписка, сквозное шифрование, QR-коды и звонки ещё не реализованы. Не используй тестовый сервер для личных данных.",
+                color = Snow, fontSize = 12.sp)
+        }
     }
 }
 
