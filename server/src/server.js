@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS invites (code TEXT PRIMARY KEY, owner_id TEXT NOT NUL
 CREATE TABLE IF NOT EXISTS contacts (user_id TEXT NOT NULL, contact_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY(user_id, contact_id));
 CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, sender_id TEXT NOT NULL, recipient_id TEXT NOT NULL, ciphertext TEXT NOT NULL, created_at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS messages_recipient ON messages(recipient_id, created_at);
+CREATE TABLE IF NOT EXISTS voice_notes (id TEXT PRIMARY KEY, sender_id TEXT NOT NULL, recipient_id TEXT NOT NULL, ciphertext BLOB NOT NULL, content_type TEXT NOT NULL, created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS voice_notes_recipient ON voice_notes(recipient_id, created_at);
 CREATE INDEX IF NOT EXISTS invites_expiry ON invites(expires_at, used_by);
 `);
 // Upgrade databases created by earlier versions without losing stored invites.
@@ -121,6 +123,52 @@ app.post("/v1/messages/send", auth, rateLimit({ windowMs: 60_000, max: 120 }), (
   deliver(recipientId, { type: "message", ...message });
   return json(res, 201, { id: message.id, accepted: true });
 });
+
+// Voice-note media is stored as opaque ciphertext. The Android client must encrypt
+// the recording before upload and decrypt only after download; the server has no key.
+const MAX_VOICE_CIPHERTEXT_BYTES = 10 * 1024 * 1024;
+app.post("/v1/voice-notes/:recipientId", auth, rateLimit({ windowMs: 60_000, max: 20 }),
+  express.raw({ type: "application/octet-stream", limit: MAX_VOICE_CIPHERTEXT_BYTES }),
+  (req, res) => {
+    const recipientId = req.params.recipientId;
+    const contentType = typeof req.headers["x-vaynax-content-type"] === "string"
+      ? req.headers["x-vaynax-content-type"].slice(0, 100) : "application/octet-stream";
+    if (!/^[0-9a-f-]{36}$/i.test(recipientId) || recipientId === req.user.id ||
+        !Buffer.isBuffer(req.body) || req.body.length < 29 ||
+        !db.prepare("SELECT 1 FROM contacts WHERE user_id=? AND contact_id=?").get(req.user.id, recipientId)) {
+      return json(res, 400, { error: "Invalid encrypted voice-note payload or recipient" });
+    }
+    const id = crypto.randomUUID();
+    const createdAt = Date.now();
+    db.prepare("INSERT INTO voice_notes(id,sender_id,recipient_id,ciphertext,content_type,created_at) VALUES(?,?,?,?,?,?)")
+      .run(id, req.user.id, recipientId, req.body, contentType, createdAt);
+    deliver(recipientId, { type: "voice_note", id, senderId: req.user.id, createdAt });
+    return json(res, 201, { id, accepted: true, createdAt });
+  });
+app.get("/v1/voice-notes/pending", auth, (req, res) => {
+  db.prepare("DELETE FROM voice_notes WHERE created_at < ?").run(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const rows = db.prepare("SELECT id,sender_id AS senderId,content_type AS contentType,created_at AS createdAt,length(ciphertext) AS sizeBytes FROM voice_notes WHERE recipient_id=? ORDER BY created_at LIMIT 100").all(req.user.id);
+  json(res, 200, { voiceNotes: rows });
+});
+app.get("/v1/voice-notes/:id", auth, (req, res) => {
+  if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return json(res, 400, { error: "Invalid voice-note ID" });
+  const note = db.prepare("SELECT sender_id,recipient_id,ciphertext,content_type FROM voice_notes WHERE id=?").get(req.params.id);
+  if (!note || (note.recipient_id !== req.user.id && note.sender_id !== req.user.id)) {
+    return json(res, 404, { error: "Voice note not found" });
+  }
+  res.set("Content-Type", "application/octet-stream");
+  res.set("X-Vaynax-Content-Type", note.content_type);
+  res.set("Cache-Control", "no-store");
+  res.status(200).send(note.ciphertext);
+});
+app.post("/v1/voice-notes/ack", auth, (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.filter(x => typeof x === "string" && x.length <= 80))].slice(0, 100) : [];
+  const remove = db.prepare("DELETE FROM voice_notes WHERE id=? AND recipient_id=?");
+  const transaction = db.transaction(() => ids.forEach(id => remove.run(id, req.user.id)));
+  transaction();
+  json(res, 200, { acknowledged: ids.length });
+});
+
 app.get("/v1/messages/pending", auth, (req, res) => {
   // Expire old queued payloads to prevent unbounded storage growth.
   db.prepare("DELETE FROM messages WHERE created_at < ?").run(Date.now() - 30 * 24 * 60 * 60 * 1000);
