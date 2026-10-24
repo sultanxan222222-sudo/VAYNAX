@@ -10,6 +10,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -246,13 +248,13 @@ private fun ChatHome(
         }
     }
 
-    Column(Modifier.fillMaxSize().background(DeepEmerald).padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).background(DeepEmerald).padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("VAYNAX", color = Gold, fontSize = 27.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Button(onClick = onBack) { Text("Назад") }
         }
         Text("Подключение и контакты", color = Snow, fontSize = 21.sp, fontWeight = FontWeight.SemiBold)
-        Column(Modifier.fillMaxWidth().weight(1f).padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(value = baseUrl, onValueChange = onBaseUrlChange, modifier = Modifier.fillMaxWidth(),
                 label = { Text("Адрес сервера HTTPS") }, singleLine = true, placeholder = { Text("https://твой-сервер.example") })
             if (token.isBlank()) {
