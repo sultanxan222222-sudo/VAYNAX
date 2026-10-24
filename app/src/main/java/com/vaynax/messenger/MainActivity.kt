@@ -88,7 +88,7 @@ private fun VaynaxApp() {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("vaynax_private", android.content.Context.MODE_PRIVATE) }
     var showChats by remember { mutableStateOf(false) }
-    var baseUrl by remember { mutableStateOf(prefs.getString("server_url", "") ?: "") }
+    var baseUrl by remember { mutableStateOf(prefs.getString("server_url", "https://vaynax-server.onrender.com") ?: "https://vaynax-server.onrender.com") }
     var token by remember { mutableStateOf(prefs.getString("account_token", "") ?: "") }
     var accountName by remember { mutableStateOf(prefs.getString("account_name", "") ?: "") }
     Surface(Modifier.fillMaxSize(), color = DeepEmerald) {
