@@ -18,6 +18,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -309,6 +314,65 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
+private fun VaynaxBackdrop(modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val w = size.width
+        val h = size.height
+        val ridge = Path().apply {
+            moveTo(0f, h * 0.40f)
+            lineTo(w * 0.15f, h * 0.28f)
+            lineTo(w * 0.25f, h * 0.34f)
+            lineTo(w * 0.43f, h * 0.17f)
+            lineTo(w * 0.57f, h * 0.31f)
+            lineTo(w * 0.72f, h * 0.20f)
+            lineTo(w * 0.88f, h * 0.32f)
+            lineTo(w, h * 0.26f)
+            lineTo(w, h)
+            lineTo(0f, h)
+            close()
+        }
+        drawPath(ridge, Color(0xFF0B3A31))
+        val snow = Path().apply {
+            moveTo(w * 0.34f, h * 0.26f)
+            lineTo(w * 0.43f, h * 0.17f)
+            lineTo(w * 0.49f, h * 0.25f)
+            lineTo(w * 0.44f, h * 0.23f)
+            lineTo(w * 0.41f, h * 0.27f)
+            close()
+        }
+        drawPath(snow, Gold.copy(alpha = 0.32f))
+        // Stone watchtower silhouette
+        drawRect(Color(0xFF102C27), Offset(w * 0.73f, h * 0.22f), Size(w * 0.09f, h * 0.23f))
+        val roof = Path().apply {
+            moveTo(w * 0.70f, h * 0.22f)
+            lineTo(w * 0.775f, h * 0.14f)
+            lineTo(w * 0.85f, h * 0.22f)
+            close()
+        }
+        drawPath(roof, Gold.copy(alpha = 0.58f))
+        drawRect(Gold.copy(alpha = 0.35f), Offset(w * 0.765f, h * 0.28f), Size(w * 0.018f, h * 0.045f))
+        // Figure in a papakha, facing the mountain range
+        drawCircle(Color(0xFF071A17), w * 0.045f, Offset(w * 0.22f, h * 0.30f))
+        drawOval(Color(0xFF071A17), topLeft = Offset(w * 0.155f, h * 0.33f), size = Size(w * 0.13f, h * 0.17f))
+        drawRect(Gold.copy(alpha = 0.85f), Offset(w * 0.17f, h * 0.285f), Size(w * 0.10f, h * 0.022f))
+        drawRect(Color(0xFF071A17), Offset(w * 0.18f, h * 0.275f), Size(w * 0.08f, h * 0.025f))
+        // Chechen flag motif: green, white, red with gold staff
+        drawLine(Gold.copy(alpha = 0.75f), Offset(w * 0.31f, h * 0.19f), Offset(w * 0.31f, h * 0.34f), strokeWidth = 2f)
+        val fw = w * 0.12f
+        val fh = h * 0.025f
+        drawRect(Color(0xFF168653), Offset(w * 0.315f, h * 0.20f), Size(fw, fh))
+        drawRect(Color(0xFFF5F7F8), Offset(w * 0.315f, h * 0.20f + fh), Size(fw, fh))
+        drawRect(Color(0xFFB62835), Offset(w * 0.315f, h * 0.20f + fh * 2), Size(fw, fh))
+        // Fine ornamental edge marks
+        for (i in 0..18) {
+            val y = h * 0.06f + i * h * 0.047f
+            drawLine(Gold.copy(alpha = 0.24f), Offset(5f, y), Offset(15f, y + 7f), strokeWidth = 1.5f)
+            drawLine(Gold.copy(alpha = 0.24f), Offset(w - 5f, y), Offset(w - 15f, y + 7f), strokeWidth = 1.5f)
+        }
+    }
+}
+
+@Composable
 private fun VaynaxApp(
     onDiscover: ((List<WifiP2pDevice>) -> Unit, (String) -> Unit, (Boolean) -> Unit, (ChatLine) -> Unit) -> Unit,
     onConnect: (WifiP2pDevice) -> Unit,
@@ -469,11 +533,10 @@ private fun VaynaxApp(
                     Spacer(Modifier.height(6.dp))
                     Box(Modifier.weight(1f).fillMaxWidth().background(Color(0xFF031F1B), RoundedCornerShape(16.dp))
                         .border(1.dp, Gold.copy(alpha = 0.25f), RoundedCornerShape(16.dp))) {
-                        Column(Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(top = 14.dp),
+                        VaynaxBackdrop(Modifier.fillMaxSize())
+                        Column(Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(top = 12.dp),
                             horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("🇨🇮", color = Gold.copy(alpha = 0.75f), fontSize = 18.sp)
-                            Text("⛰   🏰   ⛰", color = Gold.copy(alpha = 0.48f), fontSize = 22.sp)
-                            Text("VAYNAX · СВЯЗЬ С БЛИЗКИМИ", color = Gold.copy(alpha = 0.6f), fontSize = 9.sp, letterSpacing = 1.2.sp)
+                            Text("V A Y N A X", color = Gold.copy(alpha = 0.68f), fontSize = 10.sp, letterSpacing = 2.sp)
                         }
                         LazyColumn(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 76.dp),
                         verticalArrangement = Arrangement.spacedBy(7.dp)) {
