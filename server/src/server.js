@@ -105,6 +105,22 @@ app.get("/v1/contacts", auth, (req, res) => {
   const contacts = db.prepare("SELECT u.id,u.name,c.created_at AS addedAt FROM contacts c JOIN users u ON u.id=c.contact_id WHERE c.user_id=? ORDER BY c.created_at DESC").all(req.user.id);
   json(res, 200, { contacts });
 });
+app.post("/v1/messages/send", auth, rateLimit({ windowMs: 60_000, max: 120 }), (req, res) => {
+  const recipientId = typeof req.body?.recipientId === "string" ? req.body.recipientId : "";
+  const ciphertext = typeof req.body?.ciphertext === "string" ? req.body.ciphertext : "";
+  if (!/^[0-9a-f-]{36}$/i.test(recipientId) || !ciphertext || ciphertext.length > 48_000) {
+    return json(res, 400, { error: "Invalid message payload" });
+  }
+  if (recipientId === req.user.id) return json(res, 400, { error: "Cannot message yourself" });
+  if (!db.prepare("SELECT 1 FROM contacts WHERE user_id=? AND contact_id=?").get(req.user.id, recipientId)) {
+    return json(res, 403, { error: "Recipient is not an approved contact" });
+  }
+  const message = { id: crypto.randomUUID(), senderId: req.user.id, ciphertext, createdAt: Date.now() };
+  db.prepare("INSERT INTO messages(id,sender_id,recipient_id,ciphertext,created_at) VALUES(?,?,?,?,?)")
+    .run(message.id, req.user.id, recipientId, ciphertext, message.createdAt);
+  deliver(recipientId, { type: "message", ...message });
+  return json(res, 201, { id: message.id, accepted: true });
+});
 app.get("/v1/messages/pending", auth, (req, res) => {
   // Expire old queued payloads to prevent unbounded storage growth.
   db.prepare("DELETE FROM messages WHERE created_at < ?").run(Date.now() - 30 * 24 * 60 * 60 * 1000);
