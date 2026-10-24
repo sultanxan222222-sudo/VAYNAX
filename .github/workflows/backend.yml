@@ -43,3 +43,5 @@ jobs:
           done
           cat /tmp/vaynax-server.log
           exit 1
+      - name: Test registration, one-time invites, and contacts
+        run: bash scripts/smoke-test.sh
