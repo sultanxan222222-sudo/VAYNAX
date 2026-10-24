@@ -1,4 +1,4 @@
-name: Android debug APK
+name: VAYNAX Android APK build
 
 on:
   push:
