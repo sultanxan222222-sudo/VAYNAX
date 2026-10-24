@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.sin
@@ -198,6 +199,42 @@ private fun ChatHome(
     var chatMessages by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var status by remember { mutableStateOf("Укажи адрес работающего сервера, чтобы подключить аккаунт.") }
     var busy by remember { mutableStateOf(false) }
+
+    // Keep the open chat fresh while the app is in the foreground.
+    // Messages from other contacts stay queued until their own chat is opened.
+    LaunchedEffect(baseUrl, token, selectedContact?.id) {
+        val activeContact = selectedContact
+        if (token.isNotBlank() && baseUrl.isNotBlank() && activeContact != null) {
+            while (true) {
+                delay(3500)
+                try {
+                    val api = VaynaxApi(baseUrl)
+                    val pending = api.pendingMessages(token)
+                    val incoming = pending.filter { it.senderId == activeContact.id }
+                    if (incoming.isNotEmpty()) {
+                        val decoded = incoming.mapNotNull { msg ->
+                            try {
+                                val bytes = android.util.Base64.decode(
+                                    msg.ciphertext.removePrefix("v1:"),
+                                    android.util.Base64.DEFAULT
+                                )
+                                Pair(msg.senderId, String(bytes, Charsets.UTF_8))
+                            } catch (_: Exception) { null }
+                        }
+                        if (decoded.isNotEmpty()) {
+                            chatMessages = (chatMessages + decoded).takeLast(200)
+                            playMessageClink()
+                        }
+                        api.acknowledge(token, incoming.map { it.id })
+                    }
+                } catch (_: kotlinx.coroutines.CancellationException) {
+                    throw kotlinx.coroutines.CancellationException()
+                } catch (_: Exception) {
+                    // Temporary network failures are retried on the next cycle.
+                }
+            }
+        }
+    }
 
     fun runRequest(action: suspend () -> String) {
         if (busy) return
