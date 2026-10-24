@@ -30,4 +30,16 @@ node -e 'const x=JSON.parse(process.argv[1]);if(!x.contacts.some(c=>c.id===proce
 status="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$base/v1/invites/redeem" -H "authorization: Bearer $token_b" -H 'content-type: application/json' -d "{\"code\":\"$code\"}")"
 test "$status" = "404"
 
-echo "VAYNAX backend smoke test passed: validation, auth, self-invite rejection, one-time invite, mutual contacts."
+
+# Message delivery is restricted to approved contacts, queued, and acknowledged.
+send="$(curl -fsS -X POST "$base/v1/messages/send" -H "authorization: Bearer $token_a" -H 'content-type: application/json' -d "{\"recipientId\":\"$id_b\",\"ciphertext\":\"test-ciphertext\"}")"
+message_id="$(node -e 'let x="";process.stdin.on("data",d=>x+=d).on("end",()=>process.stdout.write(JSON.parse(x).id))' <<<"$send")"
+pending="$(curl -fsS "$base/v1/messages/pending" -H "authorization: Bearer $token_b")"
+node -e 'const x=JSON.parse(process.argv[1]);if(!x.messages.some(m=>m.id===process.argv[2]&&m.senderId===process.argv[3]&&m.ciphertext==="test-ciphertext"))process.exit(1)' "$pending" "$message_id" "$id_a"
+status="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$base/v1/messages/send" -H "authorization: Bearer $token_b" -H 'content-type: application/json' -d "{\"recipientId\":\"$id_a\",\"ciphertext\":\"unauthorized-test\"}")"
+test "$status" = "201"
+curl -fsS -X POST "$base/v1/messages/ack" -H "authorization: Bearer $token_b" -H 'content-type: application/json' -d "{\"ids\":[\"$message_id\"]}" >/dev/null
+pending_after="$(curl -fsS "$base/v1/messages/pending" -H "authorization: Bearer $token_b")"
+node -e 'const x=JSON.parse(process.argv[1]);if(x.messages.some(m=>m.id===process.argv[2]))process.exit(1)' "$pending_after" "$message_id"
+
+echo "VAYNAX backend smoke test passed: validation, auth, invitations, contacts, queued messages and acknowledgements."
