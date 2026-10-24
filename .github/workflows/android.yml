@@ -23,8 +23,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      # GitHub-hosted Android runners already include the SDK. Avoid setup-android
-      # here: its current action attempts to install the removed legacy "tools" package.
+      # GitHub-hosted Android runners include the SDK. Install the required API/build tools.
       - name: Install Android platform and build tools
         run: |
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
@@ -34,6 +33,8 @@ jobs:
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14'
       - name: Build debug APK
         run: gradle --no-daemon clean assembleDebug
       - name: Verify APK exists and is non-empty
@@ -45,5 +46,3 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
-
-# CI trigger: build a fresh APK from the current main branch.
