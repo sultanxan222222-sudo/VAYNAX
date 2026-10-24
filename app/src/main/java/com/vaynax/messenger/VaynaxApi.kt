@@ -8,6 +8,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 data class VaynaxContact(val id: String, val name: String)
+data class VaynaxMessage(val id: String, val senderId: String, val ciphertext: String, val createdAt: Long)
 
 class VaynaxApi(baseUrl: String) {
     private val base = baseUrl.trim().trimEnd('/')
@@ -52,6 +53,25 @@ class VaynaxApi(baseUrl: String) {
     suspend fun createInvite(token: String): JSONObject = request("POST", "/v1/invites", token)
     suspend fun redeemInvite(token: String, code: String): JSONObject =
         request("POST", "/v1/invites/redeem", token, JSONObject().put("code", code.trim()))
+    suspend fun sendMessage(token: String, recipientId: String, ciphertext: String): JSONObject =
+        request("POST", "/v1/messages/send", token,
+            JSONObject().put("recipientId", recipientId).put("ciphertext", ciphertext))
+
+    suspend fun pendingMessages(token: String): List<VaynaxMessage> {
+        val items = request("GET", "/v1/messages/pending", token).optJSONArray("messages") ?: JSONArray()
+        return (0 until items.length()).mapNotNull { index ->
+            val item = items.optJSONObject(index) ?: return@mapNotNull null
+            VaynaxMessage(item.optString("id"), item.optString("senderId"),
+                item.optString("ciphertext"), item.optLong("createdAt"))
+        }
+    }
+
+    suspend fun acknowledge(token: String, ids: List<String>) {
+        val array = JSONArray()
+        ids.forEach { array.put(it) }
+        request("POST", "/v1/messages/ack", token, JSONObject().put("ids", array))
+    }
+
     suspend fun contacts(token: String): List<VaynaxContact> {
         val items: JSONArray = request("GET", "/v1/contacts", token).optJSONArray("contacts") ?: JSONArray()
         return (0 until items.length()).mapNotNull { index ->
