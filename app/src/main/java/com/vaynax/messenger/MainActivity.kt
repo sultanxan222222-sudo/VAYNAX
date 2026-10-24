@@ -146,25 +146,49 @@ class MainActivity : ComponentActivity() {
         } catch (_: SecurityException) { statusUpdate?.invoke("Нет разрешения на соединение.") }
     }
 
+    @Volatile private var activeGroupOwner = false
+    @Volatile private var connectionAttemptRunning = false
+
     private fun onP2pConnected(info: WifiP2pInfo) {
-        if (!info.groupFormed) return
-        statusUpdate?.invoke("Wi-Fi Direct соединён. Запуск защищённого канала…")
+        if (!info.groupFormed || connectionAttemptRunning || connected) return
+        connectionAttemptRunning = true
+        activeGroupOwner = info.isGroupOwner
+        statusUpdate?.invoke("Wi-Fi Direct соединён. Настраиваю защищённый канал…")
         if (info.isGroupOwner) {
             io.execute {
                 try {
                     serverSocket?.close()
-                    serverSocket = ServerSocket().apply { reuseAddress = true; bind(InetSocketAddress(CHAT_PORT), 8) }
-                    val client = serverSocket!!.accept()
+                    val server = ServerSocket()
+                    server.reuseAddress = true
+                    server.bind(InetSocketAddress(CHAT_PORT), 8)
+                    server.soTimeout = 45_000
+                    serverSocket = server
+                    val client = server.accept()
                     attachSocket(client)
-                } catch (e: Exception) { runOnUiThread { statusUpdate?.invoke("Не удалось открыть локальный канал: ${e.message ?: "ошибка"}") } }
+                } catch (e: Exception) {
+                    connectionAttemptRunning = false
+                    runOnUiThread { statusUpdate?.invoke("Ожидание второго телефона завершилось: ${e.message ?: "ошибка"}") }
+                }
             }
         } else {
+            val host = info.groupOwnerAddress.hostAddress
             io.execute {
-                try {
-                    val client = Socket()
-                    client.connect(InetSocketAddress(info.groupOwnerAddress.hostAddress, CHAT_PORT), 12000)
-                    attachSocket(client)
-                } catch (e: Exception) { runOnUiThread { statusUpdate?.invoke("Не удалось подключить канал: ${e.message ?: "ошибка"}") } }
+                var lastError: Exception? = null
+                for (attempt in 1..8) {
+                    if (connected) return@execute
+                    try {
+                        val client = Socket()
+                        client.tcpNoDelay = true
+                        client.connect(InetSocketAddress(host, CHAT_PORT), 4000)
+                        attachSocket(client)
+                        return@execute
+                    } catch (e: Exception) {
+                        lastError = e
+                        try { Thread.sleep(900) } catch (_: InterruptedException) { Thread.currentThread().interrupt(); break }
+                    }
+                }
+                connectionAttemptRunning = false
+                runOnUiThread { statusUpdate?.invoke("Не удалось открыть канал после повторных попыток: ${lastError?.message ?: "ошибка"}") }
             }
         }
     }
@@ -211,6 +235,7 @@ class MainActivity : ComponentActivity() {
                 runOnUiThread { statusUpdate?.invoke("Защищённый канал закрыт: ${e.message ?: "ошибка"}"); connectionUpdate?.invoke(false) }
             } finally {
                 connected = false
+                connectionAttemptRunning = false
                 sessionKey = null
                 writer = null
                 try { s.close() } catch (_: Exception) {}
