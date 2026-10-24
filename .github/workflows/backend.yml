@@ -37,11 +37,10 @@ jobs:
           for attempt in {1..30}; do
             if curl --fail --silent http://127.0.0.1:8088/health; then
               echo
+              bash scripts/smoke-test.sh
               exit 0
             fi
             sleep 1
           done
           cat /tmp/vaynax-server.log
           exit 1
-      - name: Test registration, one-time invites, and contacts
-        run: bash scripts/smoke-test.sh
