@@ -39,7 +39,12 @@ import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.security.KeyPairGenerator
+import java.security.KeyFactory
+import java.security.PublicKey
 import java.security.SecureRandom
+import java.security.spec.X509EncodedKeySpec
+import javax.crypto.KeyAgreement
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.Executors
 import javax.crypto.Cipher
@@ -67,6 +72,7 @@ class MainActivity : ComponentActivity() {
     private var serverSocket: ServerSocket? = null
     private val io = Executors.newCachedThreadPool()
     @Volatile private var writer: PrintWriter? = null
+    @Volatile private var sessionKey: SecretKey? = null
     @Volatile private var connected = false
     private val seen = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
@@ -166,16 +172,33 @@ class MainActivity : ComponentActivity() {
     private fun attachSocket(s: Socket) {
         socket?.close()
         socket = s
-        val out = PrintWriter(s.getOutputStream(), true)
-        writer = out
-        connected = true
-        runOnUiThread { connectionUpdate?.invoke(true); statusUpdate?.invoke("Локальный канал установлен.") }
         io.execute {
             try {
+                s.tcpNoDelay = true
+                val out = PrintWriter(s.getOutputStream(), true)
                 val input = BufferedReader(InputStreamReader(s.getInputStream(), Charsets.UTF_8))
+                // Ephemeral ECDH key agreement creates a fresh AES-GCM session key per connection.
+                val generator = KeyPairGenerator.getInstance("EC").apply { initialize(java.security.spec.ECGenParameterSpec("secp256r1")) }
+                val pair = generator.generateKeyPair()
+                out.println(JSONObject().put("type", "hello").put("pub", Base64.encodeToString(pair.public.encoded, Base64.NO_WRAP)))
+                val helloLine = input.readLine() ?: throw IllegalStateException("peer closed during handshake")
+                val hello = JSONObject(helloLine)
+                if (hello.optString("type") != "hello") throw IllegalStateException("invalid handshake")
+                val peerBytes = Base64.decode(hello.getString("pub"), Base64.NO_WRAP)
+                val peerPublic: PublicKey = KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(peerBytes))
+                val agreement = KeyAgreement.getInstance("ECDH")
+                agreement.init(pair.private)
+                agreement.doPhase(peerPublic, true)
+                val raw = agreement.generateSecret()
+                val keyBytes = MessageDigest.getInstance("SHA-256").digest(raw)
+                sessionKey = javax.crypto.spec.SecretKeySpec(keyBytes, "AES")
+                writer = out
+                connected = true
+                runOnUiThread { connectionUpdate?.invoke(true); statusUpdate?.invoke("Защищённый локальный канал установлен.") }
                 while (!s.isClosed) {
                     val line = input.readLine() ?: break
                     val obj = JSONObject(line)
+                    if (obj.optString("type") != "message") continue
                     val id = obj.optString("id")
                     if (id.isBlank() || !seen.add(id)) continue
                     val plain = decrypt(obj.optString("cipher"), obj.optString("iv"))
@@ -184,37 +207,29 @@ class MainActivity : ComponentActivity() {
                     saveMessage(item)
                     runOnUiThread { messageUpdate?.invoke(item) }
                 }
-            } catch (_: Exception) {
-                runOnUiThread { statusUpdate?.invoke("Канал закрыт. Попробуй соединиться снова."); connectionUpdate?.invoke(false) }
-            } finally { connected = false }
+            } catch (e: Exception) {
+                runOnUiThread { statusUpdate?.invoke("Защищённый канал закрыт: ${e.message ?: "ошибка"}"); connectionUpdate?.invoke(false) }
+            } finally {
+                connected = false
+                sessionKey = null
+                writer = null
+                try { s.close() } catch (_: Exception) {}
+            }
         }
     }
 
-    /*
-     * Each message uses AES-GCM with a per-install secret. It protects local message
-     * payloads and accidental clear-text forwarding, but peers must share the same key
-     * for decryption. The next identity/QR layer must transfer this key securely.
-     */
-    private fun localSecret(): SecretKey {
-        val prefs = getSharedPreferences("vaynax_crypto", MODE_PRIVATE)
-        val encoded = prefs.getString("aes_key", null)
-        if (encoded != null) return javax.crypto.spec.SecretKeySpec(Base64.decode(encoded, Base64.NO_WRAP), "AES")
-        val gen = KeyGenerator.getInstance("AES").apply { init(256) }
-        val key = gen.generateKey()
-        prefs.edit().putString("aes_key", Base64.encodeToString(key.encoded, Base64.NO_WRAP)).apply()
-        return key
-    }
-
     private fun encrypt(plain: String): Pair<String, String> {
+        val key = sessionKey ?: throw IllegalStateException("secure session not ready")
         val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, localSecret(), GCMParameterSpec(128, iv))
+        cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
         return Base64.encodeToString(cipher.doFinal(plain.toByteArray(Charsets.UTF_8)), Base64.NO_WRAP) to Base64.encodeToString(iv, Base64.NO_WRAP)
     }
 
     private fun decrypt(cipherText: String, ivText: String): String {
+        val key = sessionKey ?: throw IllegalStateException("secure session not ready")
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, localSecret(), GCMParameterSpec(128, Base64.decode(ivText, Base64.NO_WRAP)))
+        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, Base64.decode(ivText, Base64.NO_WRAP)))
         return String(cipher.doFinal(Base64.decode(cipherText, Base64.NO_WRAP)), Charsets.UTF_8)
     }
 
@@ -225,7 +240,7 @@ class MainActivity : ComponentActivity() {
             val id = UUID.randomUUID().toString()
             val prefs = getSharedPreferences("vaynax_local_account", MODE_PRIVATE)
             val sender = prefs.getString("nickname", "VAYNAX") ?: "VAYNAX"
-            val obj = JSONObject().put("id", id).put("sender", sender).put("cipher", cipher).put("iv", iv)
+            val obj = JSONObject().put("type", "message").put("id", id).put("sender", sender).put("cipher", cipher).put("iv", iv)
             writer?.println(obj.toString())
             if (writer?.checkError() == true) throw IllegalStateException("send failed")
             val item = ChatLine(id, sender, text, true)
