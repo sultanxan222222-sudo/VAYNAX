@@ -227,8 +227,8 @@ private fun ChatHome(
                         }
                         api.acknowledge(token, incoming.map { it.id })
                     }
-                } catch (_: kotlinx.coroutines.CancellationException) {
-                    throw kotlinx.coroutines.CancellationException()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
                 } catch (_: Exception) {
                     // Temporary network failures are retried on the next cycle.
                 }
