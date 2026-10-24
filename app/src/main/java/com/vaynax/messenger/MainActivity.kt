@@ -302,18 +302,23 @@ private fun ChatHome(
                 if (selectedContact != null) {
                     Text("Чат: ${selectedContact!!.name}", color = Gold, fontWeight = FontWeight.Bold)
                     Button(enabled = !busy, onClick = { runRequest {
+                        val activeContact = selectedContact ?: error("Сначала выбери контакт")
                         val api = VaynaxApi(baseUrl)
+                        // Only acknowledge messages from the currently open chat.
+                        // Acknowledging every pending message here silently discarded
+                        // messages belonging to other contacts.
                         val pending = api.pendingMessages(token)
-                        val decoded = pending.mapNotNull { msg ->
+                        val incoming = pending.filter { it.senderId == activeContact.id }
+                        val decoded = incoming.mapNotNull { msg ->
                             try {
                                 val bytes = android.util.Base64.decode(msg.ciphertext.removePrefix("v1:"), android.util.Base64.DEFAULT)
                                 Pair(msg.senderId, String(bytes, Charsets.UTF_8))
                             } catch (_: Exception) { null }
                         }
                         chatMessages = (chatMessages + decoded).takeLast(200)
-                        if (decoded.any { it.first != "me" }) playMessageClink()
-                        api.acknowledge(token, pending.map { it.id })
-                        "Загружено сообщений: ${decoded.size}. Важно: содержимое пока не защищено сквозным шифрованием."
+                        if (decoded.isNotEmpty()) playMessageClink()
+                        if (incoming.isNotEmpty()) api.acknowledge(token, incoming.map { it.id })
+                        "Загружено сообщений этого чата: ${decoded.size}. Важно: содержимое пока не защищено сквозным шифрованием."
                     } }, modifier = Modifier.fillMaxWidth()) { Text("Загрузить сообщения") }
                     chatMessages.takeLast(8).forEach { item ->
                         val sender = contacts.firstOrNull { it.id == item.first }?.name ?: if (item.first == "me") "Ты" else "Контакт"
