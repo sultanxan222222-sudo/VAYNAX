@@ -19,8 +19,13 @@ class VaynaxApi(baseUrl: String) {
         token: String? = null,
         body: JSONObject? = null
     ): JSONObject = withContext(Dispatchers.IO) {
-        require(base.startsWith("https://") || base.startsWith("http://")) {
-            "Укажи адрес сервера, начинающийся с https://"
+        val parsedUrl = runCatching { URL(base) }.getOrNull()
+        val secureTransport = parsedUrl?.protocol.equals("https", ignoreCase = true)
+        val loopbackDevelopment = parsedUrl?.protocol.equals("http", ignoreCase = true) &&
+            (parsedUrl?.host.equals("localhost", ignoreCase = true) ||
+             parsedUrl?.host == "127.0.0.1" || parsedUrl?.host == "::1")
+        require(parsedUrl != null && (secureTransport || loopbackDevelopment)) {
+            "Для защиты аккаунта нужен HTTPS. HTTP разрешён только для localhost при локальной разработке."
         }
         val connection = (URL(base + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
