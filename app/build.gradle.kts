@@ -33,5 +33,7 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
+    // WebRTC media engine; call setup/signaling integration is implemented separately.
+    implementation("io.github.webrtc-sdk:android:125.6422.07")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
