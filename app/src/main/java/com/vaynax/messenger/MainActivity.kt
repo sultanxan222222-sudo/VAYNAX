@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -152,6 +153,9 @@ private fun ChatHome(
     var inviteCode by remember { mutableStateOf("") }
     var createdInvite by remember { mutableStateOf("") }
     var contacts by remember { mutableStateOf<List<VaynaxContact>>(emptyList()) }
+    var selectedContact by remember { mutableStateOf<VaynaxContact?>(null) }
+    var messageDraft by remember { mutableStateOf("") }
+    var chatMessages by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var status by remember { mutableStateOf("Укажи адрес работающего сервера, чтобы подключить аккаунт.") }
     var busy by remember { mutableStateOf(false) }
 
@@ -210,7 +214,47 @@ private fun ChatHome(
                 } }, modifier = Modifier.fillMaxWidth()) { Text("Обновить контакты") }
                 Text("Контакты", color = Snow, fontWeight = FontWeight.SemiBold)
                 if (contacts.isEmpty()) Text("Пока нет загруженных контактов.", color = Snow, fontSize = 13.sp)
-                contacts.forEach { Text("• ${it.name}", color = Snow, fontSize = 15.sp) }
+                contacts.forEach { contact ->
+                    Text("• ${contact.name}", color = if (selectedContact?.id == contact.id) Gold else Snow,
+                        fontSize = 15.sp, modifier = Modifier.fillMaxWidth().clickable {
+                            selectedContact = contact
+                            chatMessages = emptyList()
+                            status = "Выбран контакт: ${contact.name}. Нажми «Загрузить сообщения»."
+                        }.padding(vertical = 4.dp))
+                }
+                if (selectedContact != null) {
+                    Text("Чат: ${selectedContact!!.name}", color = Gold, fontWeight = FontWeight.Bold)
+                    Button(enabled = !busy, onClick = { runRequest {
+                        val api = VaynaxApi(baseUrl)
+                        val pending = api.pendingMessages(token)
+                        val decoded = pending.mapNotNull { msg ->
+                            try {
+                                val bytes = android.util.Base64.decode(msg.ciphertext.removePrefix("v1:"), android.util.Base64.DEFAULT)
+                                Pair(msg.senderId, String(bytes, Charsets.UTF_8))
+                            } catch (_: Exception) { null }
+                        }
+                        chatMessages = (chatMessages + decoded).takeLast(200)
+                        api.acknowledge(token, pending.map { it.id })
+                        "Загружено сообщений: ${decoded.size}. Важно: содержимое пока не защищено сквозным шифрованием."
+                    } }, modifier = Modifier.fillMaxWidth()) { Text("Загрузить сообщения") }
+                    chatMessages.takeLast(8).forEach { item ->
+                        val sender = contacts.firstOrNull { it.id == item.first }?.name ?: if (item.first == "me") "Ты" else "Контакт"
+                        Text("$sender: ${item.second}", color = Snow, fontSize = 13.sp)
+                    }
+                    OutlinedTextField(value = messageDraft, onValueChange = { messageDraft = it },
+                        modifier = Modifier.fillMaxWidth(), label = { Text("Сообщение") })
+                    Button(enabled = !busy && messageDraft.isNotBlank(), onClick = {
+                        val target = selectedContact
+                        val draft = messageDraft
+                        if (target != null) runRequest {
+                            val encoded = "v1:" + android.util.Base64.encodeToString(draft.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
+                            VaynaxApi(baseUrl).sendMessage(token, target.id, encoded)
+                            chatMessages = (chatMessages + Pair("me", draft)).takeLast(200)
+                            messageDraft = ""
+                            "Сообщение отправлено в очередь. Получатель увидит его после загрузки сообщений."
+                        }
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Отправить") }
+                }
             }
             Text(status, color = Gold, fontSize = 14.sp)
             Text("Переписка, сквозное шифрование, QR-коды и звонки ещё не реализованы. Не используй тестовый сервер для личных данных.",
