@@ -13,7 +13,8 @@ const db = new Database(process.env.DB_PATH || "./vaynax.sqlite");
 db.pragma("journal_mode = WAL");
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS invites (code TEXT PRIMARY KEY, owner_id TEXT NOT NULL, expires_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS invites (code TEXT PRIMARY KEY, owner_id TEXT NOT NULL, expires_at INTEGER NOT NULL, used_by TEXT);
+CREATE TABLE IF NOT EXISTS contacts (user_id TEXT NOT NULL, contact_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY(user_id, contact_id));
 CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, sender_id TEXT NOT NULL, recipient_id TEXT NOT NULL, ciphertext TEXT NOT NULL, created_at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS messages_recipient ON messages(recipient_id, created_at);
 `);
@@ -47,11 +48,24 @@ app.post("/v1/invites", auth, (req, res) => {
 });
 app.post("/v1/invites/redeem", auth, (req, res) => {
   const code = typeof req.body?.code === "string" ? req.body.code.trim().toUpperCase() : "";
-  const invite = db.prepare("SELECT owner_id FROM invites WHERE code=? AND expires_at>?").get(code, Date.now());
+  const invite = db.prepare("SELECT owner_id FROM invites WHERE code=? AND expires_at>? AND used_by IS NULL").get(code, Date.now());
   if (!invite) return json(res, 404, { error: "Invite not found or expired" });
   if (invite.owner_id === req.user.id) return json(res, 400, { error: "Cannot add yourself" });
   const peer = db.prepare("SELECT id,name FROM users WHERE id=?").get(invite.owner_id);
+  const now = Date.now();
+  const transaction = db.transaction(() => {
+    const claimed = db.prepare("UPDATE invites SET used_by=? WHERE code=? AND used_by IS NULL AND expires_at>?").run(req.user.id, code, now);
+    if (!claimed.changes) return false;
+    db.prepare("INSERT OR IGNORE INTO contacts(user_id,contact_id,created_at) VALUES(?,?,?)").run(req.user.id, peer.id, now);
+    db.prepare("INSERT OR IGNORE INTO contacts(user_id,contact_id,created_at) VALUES(?,?,?)").run(peer.id, req.user.id, now);
+    return true;
+  });
+  if (!transaction()) return json(res, 409, { error: "Invite already used" });
   json(res, 200, { id: peer.id, name: peer.name });
+});
+app.get("/v1/contacts", auth, (req, res) => {
+  const contacts = db.prepare("SELECT u.id,u.name,c.created_at AS addedAt FROM contacts c JOIN users u ON u.id=c.contact_id WHERE c.user_id=? ORDER BY c.created_at DESC").all(req.user.id);
+  json(res, 200, { contacts });
 });
 app.get("/v1/messages/pending", auth, (req, res) => {
   const rows = db.prepare("SELECT id,sender_id AS senderId,ciphertext,created_at AS createdAt FROM messages WHERE recipient_id=? ORDER BY created_at LIMIT 200").all(req.user.id);
@@ -95,8 +109,8 @@ wss.on("connection", ws => {
     const recipientId = typeof packet.recipientId === "string" ? packet.recipientId : "";
     const ciphertext = typeof packet.ciphertext === "string" ? packet.ciphertext : "";
     if (!recipientId || !ciphertext || ciphertext.length > 48000) return;
-    if (!db.prepare("SELECT id FROM users WHERE id=?").get(recipientId)) {
-      ws.send(JSON.stringify({ type: "error", error: "Recipient not found" })); return;
+    if (!db.prepare("SELECT 1 FROM contacts WHERE user_id=? AND contact_id=?").get(id, recipientId)) {
+      ws.send(JSON.stringify({ type: "error", error: "Recipient is not an approved contact" })); return;
     }
     const message = { type: "message", id: crypto.randomUUID(), senderId: id, ciphertext, createdAt: Date.now() };
     db.prepare("INSERT INTO messages(id,sender_id,recipient_id,ciphertext,created_at) VALUES(?,?,?,?,?)")
