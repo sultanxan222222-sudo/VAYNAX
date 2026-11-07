@@ -1,0 +1,46 @@
+name: VAYNAX HYBRID APK
+
+on:
+  push:
+    branches: [ "hybrid/vpn-client" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hybrid-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK packages
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14'
+      - name: Build HYBRID debug APK
+        run: gradle --no-daemon :hybrid:clean :hybrid:assembleDebug
+      - name: Verify APK
+        run: test -s hybrid/build/outputs/apk/debug/hybrid-debug.apk
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VAYNAX-HYBRID-debug-apk
+          path: hybrid/build/outputs/apk/debug/hybrid-debug.apk
+          if-no-files-found: error
+          retention-days: 14
