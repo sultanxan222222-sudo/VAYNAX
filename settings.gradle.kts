@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "VAYNAX"
-include(":app")
+include(":app", ":hybrid")
